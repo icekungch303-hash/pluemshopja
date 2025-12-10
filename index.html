@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLUEMSHOP Manager</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Kanit', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #fbcfe8; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #f472b6; }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
+        "firebase/analytics": "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js"
+      }
+    }
+    </script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-pink-50">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { getAnalytics } from "firebase/analytics";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+        import { 
+            getFirestore, collection, addDoc, query, onSnapshot, 
+            deleteDoc, doc, updateDoc, serverTimestamp, arrayUnion 
+        } from 'firebase/firestore';
+        import { 
+            Package, Users, Heart, Plus, Trash2, ShoppingCart, DollarSign, 
+            Calendar, Save, Edit2, Lock, Eye, EyeOff, Key, Shield, Mail, 
+            Sparkles, Ghost, Cat, Star, AlertCircle, MapPin, Image as ImageIcon, 
+            X, Hash, FileKey, Clock, CheckCircle2, CalendarDays, AlertTriangle, 
+            RefreshCcw, Gavel, Timer, LogIn, Search
+        } from 'lucide-react';
+
+        // --- FIREBASE CONFIGURATION ---
+        const userFirebaseConfig = {
+            apiKey: "AIzaSyAz_aghSat3z3IfvJ3zqoiNDCYobBSrxHg",
+            authDomain: "free-92b03.firebaseapp.com",
+            projectId: "free-92b03",
+            storageBucket: "free-92b03.firebasestorage.app",
+            messagingSenderId: "755536935776",
+            appId: "1:755536935776:web:4de45752a7e48e97a8bc05",
+            measurementId: "G-X1CVHDK65G"
+        };
+        
+        let firebaseConfig = userFirebaseConfig; 
+        let appId = 'default-app-id';
+        let isChatEnv = false;
+
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                firebaseConfig = JSON.parse(__firebase_config);
+                if (typeof __app_id !== 'undefined') appId = __app_id;
+                isChatEnv = true;
+            }
+        } catch (e) {}
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        const STORE_OWNER_ID = "admin_pluem_shop_v1";
+
+        try { const analytics = getAnalytics(app); } catch(e) {}
+
+        // Helper
+        const parseDate = (val) => {
+            if (!val) return null;
+            if (val.toDate) return val.toDate();
+            if (typeof val === 'string') return new Date(val);
+            return null;
+        };
+
+        // --- Database Path Helpers (สำคัญมาก) ---
+        const getProductsCollection = () => {
+            if (isChatEnv) {
+                // Path สำหรับรันในระบบแชท
+                return collection(db, 'artifacts', appId, 'users', STORE_OWNER_ID, 'products');
+            } else {
+                // Path สำหรับรันใน Browser/Production
+                return collection(db, 'products');
+            }
+        };
+
+        const getProductDoc = (id) => {
+            if (isChatEnv) {
+                return doc(db, 'artifacts', appId, 'users', STORE_OWNER_ID, 'products', id);
+            } else {
+                return doc(db, 'products', id);
+            }
+        };
+
+        // --- COMPONENTS ---
+
+        const CuteBackground = () => (
+            <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
+                <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(#fbcfe8 2px, transparent 2px)', backgroundSize: '24px 24px' }}></div>
+                <Ghost className="absolute top-10 left-10 text-pink-300 animate-bounce" size={40} />
+                <Cat className="absolute bottom-20 right-20 text-orange-200" size={60} />
+                <Star className="absolute top-1/3 right-10 text-yellow-300 animate-pulse" size={30} />
+                <Heart className="absolute bottom-10 left-1/4 text-red-200" size={50} />
+            </div>
+        );
+
+        const StatCard = ({ title, value, icon: Icon, colorClass, subValue }) => (
+            <div className="bg-white/90 backdrop-blur-sm p-5 rounded-3xl shadow-sm border-2 border-pink-100 flex items-start justify-between hover:scale-[1.02] transition-transform relative overflow-hidden group">
+                <div className="absolute -right-4 -top-4 bg-pink-50 w-20 h-20 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
+                <div className="relative z-10">
+                    <p className="text-gray-500 text-xs font-bold mb-1">{title}</p>
+                    <h3 className="text-xl font-black text-gray-800">{value}</h3>
+                    {subValue && <p className="text-[10px] text-pink-400 mt-1 font-bold bg-white/60 inline-block px-2 py-1 rounded-lg">{subValue}</p>}
+                </div>
+                <div className={`p-3 rounded-2xl shadow-sm relative z-10 ${colorClass} text-white`}>
+                    <Icon size={24} strokeWidth={2.5} />
+                </div>
+            </div>
+        );
+
+        const Modal = ({ isOpen, onClose, title, children, isAlert }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-pink-900/30 backdrop-blur-sm p-4">
+                    <div className={`bg-white rounded-[2rem] shadow-2xl w-full ${isAlert ? 'max-w-sm' : 'max-w-lg'} overflow-hidden animate-in fade-in zoom-in duration-300 border-4 ${isAlert ? 'border-red-100' : 'border-pink-100'}`}>
+                        <div className={`p-5 border-b ${isAlert ? 'border-red-50 bg-red-50/50' : 'border-pink-50 bg-pink-50/50'} flex justify-between items-center`}>
+                            <h3 className={`font-black text-lg ${isAlert ? 'text-red-500' : 'text-pink-500'} flex items-center gap-2`}>
+                                {isAlert ? <AlertCircle size={24}/> : <Sparkles size={20}/>} {title}
+                            </h3>
+                            <button onClick={onClose} className="bg-white text-gray-400 hover:text-pink-500 w-9 h-9 rounded-full flex items-center justify-center shadow-sm hover:shadow transition-all font-bold">✕</button>
+                        </div>
+                        <div className="p-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SecretInputGroup = ({ title, color, prefix, data, setData }) => (
+            <div className={`bg-${color}-50 p-3 rounded-xl border border-${color}-100 space-y-2`}>
+                <div className={`text-xs font-bold text-${color}-600 flex items-center gap-1 uppercase tracking-wider`}>{title === 'Game' ? <Shield size={12}/> : <Mail size={12}/>} {title} Data</div>
+                <div className="flex gap-2"><input className="w-1/2 p-2 rounded-lg text-sm border-none shadow-sm" placeholder="Email / ID" value={data[`${prefix}Email`]} onChange={(e)=>setData({...data, [`${prefix}Email`]:e.target.value})} /><input className="w-1/2 p-2 rounded-lg text-sm border-none shadow-sm" placeholder="Password" value={data[`${prefix}EmailPass`]} onChange={(e)=>setData({...data, [`${prefix}EmailPass`]:e.target.value})} /></div>
+                <div className="flex gap-2"><div className="relative w-1/2"><div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400"><Hash size={12} /></div><input className="w-full pl-7 p-2 rounded-lg text-sm border-none shadow-sm font-mono" placeholder="PIN" value={data[`${prefix}Pin`]} onChange={(e)=>setData({...data, [`${prefix}Pin`]:e.target.value})} /></div><div className="relative w-1/2"><div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400"><FileKey size={12} /></div><input className="w-full pl-7 p-2 rounded-lg text-sm border-none shadow-sm font-mono" placeholder="8-Digit Code" value={data[`${prefix}BackupCodes`]} onChange={(e)=>setData({...data, [`${prefix}BackupCodes`]:e.target.value})} /></div></div>
+                {data[`${prefix}BackupCodes`]?.length > 10 && (<textarea className="w-full p-2 rounded-lg text-sm border-none shadow-sm font-mono text-xs" rows="2" placeholder="รหัสสำรองเพิ่มเติม" value={data[`${prefix}BackupCodes`]} onChange={(e)=>setData({...data, [`${prefix}BackupCodes`]:e.target.value})} />)}
+            </div>
+        );
+
+        // --- MAIN APP COMPONENT ---
+        function App() {
+            // --- SECURITY LOCK STATE ---
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [inputPin, setInputPin] = useState('');
+            const STORE_PIN = "071148"; // <--- รหัสผ่านร้าน
+
+            const [user, setUser] = useState(null);
+            const [items, setItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [errorMsg, setErrorMsg] = useState(null);
+            
+            // New Search State
+            const [searchTerm, setSearchTerm] = useState('');
+            
+            // Modal States
+            const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+            const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+            const [isSellModalOpen, setIsSellModalOpen] = useState(false);
+            const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+            const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
+            const [isSeizeConfirmOpen, setIsSeizeConfirmOpen] = useState(false);
+
+            // Data States
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [itemToDelete, setItemToDelete] = useState(null);
+            const [itemToSeize, setItemToSeize] = useState(null);
+            const [showSecrets, setShowSecrets] = useState({});
+
+            // Inputs
+            const initialItemState = { 
+                name: '', details: '', cost: '', price: '', source: '', imageUrl: '',
+                gameEmail: '', gameEmailPass: '', gamePin: '', gameBackupCodes: '',
+                recoveryEmail: '', recoveryEmailPass: '', recoveryPin: '', recoveryBackupCodes: ''
+            };
+            const [newItem, setNewItem] = useState(initialItemState);
+            const [editItemData, setEditItemData] = useState(initialItemState);
+            const [customerInfo, setCustomerInfo] = useState({ name: '', contact: '', note: '' });
+            
+            // Date States
+            const getTodayDate = () => new Date().toISOString().split('T')[0];
+            const [receivedDate, setReceivedDate] = useState(getTodayDate());
+            const [saleDate, setSaleDate] = useState(getTodayDate());
+            const [installmentAmount, setInstallmentAmount] = useState('');
+            const [installmentDate, setInstallmentDate] = useState(getTodayDate());
+            const [closingDate, setClosingDate] = useState(getTodayDate());
+            const [installmentDueDate, setInstallmentDueDate] = useState('');
+
+            // Auth & Data
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Auth Error:", error);
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => setUser(currentUser));
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                
+                const q = query(getProductsCollection());
+                
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    setErrorMsg(null);
+                    try {
+                        const loadedItems = snapshot.docs.map(doc => {
+                            const data = doc.data();
+                            return {
+                                id: doc.id, ...data,
+                                createdAt: parseDate(data.createdAt) || new Date(),
+                                soldDate: parseDate(data.soldDate),
+                                installmentDueDate: parseDate(data.installmentDueDate)
+                            };
+                        });
+                        loadedItems.sort((a, b) => {
+                            const statusOrder = { 'available': 1, 'installment': 2, 'seized': 3, 'sold': 4 };
+                            const statusDiff = (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99);
+                            if (statusDiff !== 0) return statusDiff;
+                            return b.createdAt - a.createdAt;
+                        });
+                        setItems(loadedItems);
+                        setLoading(false);
+                    } catch (e) { console.error(e); setLoading(false); }
+                }, (error) => {
+                    console.error("Firestore Error:", error);
+                    if (error.code === 'permission-denied' || error.message.includes('permission')) {
+                        // แจ้งเตือนภาษาไทยชัดๆ
+                        setErrorMsg("⚠️ เชื่อมต่อไม่ได้: กรุณาปลดล็อก Firebase Rules เป็น: allow read, write: if true;");
+                    }
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, [user]);
+
+            // Handlers
+            const formatTHB = (num) => new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', minimumFractionDigits: 0 }).format(num || 0);
+
+            const handleImageUpload = (e, isEdit = false) => {
+                const file = e.target.files[0];
+                if (!file || file.size > 5 * 1024 * 1024) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width; let height = img.height;
+                        const MAX = 600;
+                        if (width > MAX) { height *= MAX / width; width = MAX; }
+                        canvas.width = width; canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                        if (isEdit) setEditItemData(prev => ({ ...prev, imageUrl: dataUrl }));
+                        else setNewItem(prev => ({ ...prev, imageUrl: dataUrl }));
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            };
+            const removeImage = (isEdit) => isEdit ? setEditItemData(p=>({...p, imageUrl:''})) : setNewItem(p=>({...p, imageUrl:''}));
+
+            const handleAddItem = async (e) => {
+                e.preventDefault();
+                if (!newItem.name || !newItem.cost || !newItem.price) return;
+                await addDoc(getProductsCollection(), {
+                    ...newItem, cost: parseFloat(newItem.cost), price: parseFloat(newItem.price),
+                    status: 'available', createdAt: new Date(receivedDate), totalPaid: 0, installmentLogs: []
+                });
+                setNewItem(initialItemState); setReceivedDate(getTodayDate()); setIsAddModalOpen(false);
+            };
+
+            const handleUpdateItem = async (e) => {
+                e.preventDefault();
+                if (!selectedItem) return;
+                await updateDoc(getProductDoc(selectedItem.id), {
+                    ...editItemData, cost: parseFloat(editItemData.cost), price: parseFloat(editItemData.price),
+                    details: editItemData.details // Ensure 'details' (remarks) is updated
+                });
+                setIsEditModalOpen(false); setSelectedItem(null);
+            };
+
+            const confirmDelete = async () => {
+                if (!itemToDelete) return;
+                await deleteDoc(getProductDoc(itemToDelete.id));
+                setIsDeleteModalOpen(false); setItemToDelete(null);
+            };
+
+            const handleSellItem = async (e) => {
+                e.preventDefault();
+                if (!selectedItem) return;
+                await updateDoc(getProductDoc(selectedItem.id), {
+                    status: 'sold', soldDate: new Date(saleDate),
+                    customerName: customerInfo.name, customerContact: customerInfo.contact, saleNote: customerInfo.note,
+                    finalPrice: selectedItem.price,
+                });
+                setIsSellModalOpen(false); setSelectedItem(null);
+            };
+
+            // Installment & Seize
+            const openInstallmentModal = (item) => {
+                setSelectedItem(item);
+                setCustomerInfo({ name: item.customerName || '', contact: item.customerContact || '', note: '' });
+                setInstallmentAmount('');
+                setInstallmentDate(getTodayDate());
+                setClosingDate(getTodayDate());
+                setInstallmentDueDate(item.installmentDueDate ? item.installmentDueDate.toISOString().split('T')[0] : '');
+                setIsInstallmentModalOpen(true);
+            };
+
+            const handleInstallmentSubmit = async (e) => {
+                e.preventDefault();
+                if (!selectedItem) return;
+                const amount = installmentAmount ? parseFloat(installmentAmount) : 0;
+                const isFirstTime = selectedItem.status === 'available';
+                
+                const updateData = { status: 'installment' };
+                if (amount > 0) {
+                    updateData.totalPaid = (selectedItem.totalPaid || 0) + amount;
+                    updateData.installmentLogs = arrayUnion({ date: new Date(installmentDate).toISOString(), amount: amount, note: customerInfo.note || 'จ่ายเพิ่ม' });
+                }
+                if (isFirstTime) {
+                    updateData.customerName = customerInfo.name;
+                    updateData.customerContact = customerInfo.contact;
+                }
+                if (installmentDueDate) updateData.installmentDueDate = new Date(installmentDueDate).toISOString();
+
+                await updateDoc(getProductDoc(selectedItem.id), updateData);
+                setIsInstallmentModalOpen(false); setSelectedItem(null);
+            };
+
+            const handleFinishInstallment = async () => {
+                if(!window.confirm('ยอดครบแล้ว ยืนยันการปิดยอดขาย?')) return;
+                try {
+                    await updateDoc(getProductDoc(selectedItem.id), {
+                        status: 'sold', soldDate: new Date(closingDate), finalPrice: selectedItem.totalPaid 
+                    });
+                    setIsInstallmentModalOpen(false); setSelectedItem(null);
+                } catch (error) { console.error(error); alert("Error"); }
+            };
+
+            const openSeizeConfirm = (item) => {
+                if(!item) return;
+                setItemToSeize(item);
+                setIsSeizeConfirmOpen(true);
+            }
+
+            const confirmSeize = async () => {
+                if (!itemToSeize) return;
+                try {
+                    await updateDoc(getProductDoc(itemToSeize.id), {
+                        status: 'seized', seizedDate: new Date().toISOString()
+                    });
+                    const { id, createdAt, soldDate, installmentDueDate, totalPaid, installmentLogs, customerName, customerContact, saleNote, finalPrice, seizedDate, ...productData } = itemToSeize;
+                    
+                    // Auto-Restock using helper
+                    await addDoc(getProductsCollection(), {
+                        ...productData, status: 'available', createdAt: serverTimestamp(), totalPaid: 0, installmentLogs: []
+                    });
+                    setIsSeizeConfirmOpen(false); setIsInstallmentModalOpen(false); setItemToize(null); setSelectedItem(null);
+                } catch (error) { console.error("Seize failed", error); alert("เกิดข้อผิดพลาดในการยึดคืน"); }
+            };
+
+            const handleRestockItem = async (item) => {
+                if(!window.confirm('นำกลับมาขายใหม่? (สร้างเป็นสินค้าใหม่)')) return;
+                const { id, createdAt, soldDate, installmentDueDate, totalPaid, installmentLogs, customerName, customerContact, saleNote, finalPrice, seizedDate, ...itemData } = item;
+                await addDoc(getProductsCollection(), {
+                    ...itemData, status: 'available', createdAt: serverTimestamp(), totalPaid: 0, installmentLogs: []
+                });
+            };
+
+            const stats = useMemo(() => {
+                const soldItems = items.filter(i => i.status === 'sold');
+                const installmentItems = items.filter(i => i.status === 'installment');
+                const seizedItems = items.filter(i => i.status === 'seized');
+                const availableItems = items.filter(i => i.status === 'available');
+
+                const soldRevenue = soldItems.reduce((acc, curr) => acc + (curr.finalPrice || curr.price), 0);
+                const installmentRevenue = installmentItems.reduce((acc, curr) => acc + (curr.totalPaid || 0), 0);
+                const seizedRevenue = seizedItems.reduce((acc, curr) => acc + (curr.totalPaid || 0), 0);
+                const totalRevenue = soldRevenue + installmentRevenue + seizedRevenue;
+                
+                const totalCostSold = soldItems.reduce((acc, curr) => acc + curr.cost, 0);
+                const totalProfit = totalRevenue - totalCostSold; 
+                const stockValue = availableItems.reduce((acc, curr) => acc + curr.cost, 0);
+                const potentialProfit = availableItems.reduce((acc, curr) => acc + (curr.price - curr.cost), 0);
+                
+                const monthlyData = {};
+                const processItem = (date, amount, cost) => {
+                    if(!date) return;
+                    const monthKey = date.toLocaleString('th-TH', { month: 'long', year: 'numeric' });
+                    if (!monthlyData[monthKey]) monthlyData[monthKey] = { revenue: 0, cost: 0, profit: 0, count: 0 };
+                    monthlyData[monthKey].revenue += amount;
+                    monthlyData[monthKey].cost += cost;
+                    monthlyData[monthKey].profit += (amount - cost);
+                    if(cost > 0) monthlyData[monthKey].count += 1;
+                };
+                soldItems.forEach(item => processItem(item.soldDate, (item.finalPrice || item.price), item.cost));
+
+                return { totalRevenue, totalProfit, soldCount: soldItems.length, stockCount: availableItems.length, seizedCount: seizedItems.length, seizedRevenue, stockValue, potentialProfit, monthlyData };
+            }, [items]);
+
+            const checkOverdue = (dueDate) => { if (!dueDate) return false; const today = new Date(); today.setHours(0,0,0,0); return dueDate < today; };
+            const getDaysRemaining = (dueDate) => { if (!dueDate) return null; const today = new Date(); today.setHours(0,0,0,0); const diffTime = dueDate - today; const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); if (diffDays < 0) return `เลยมา ${Math.abs(diffDays)} วัน`; if (diffDays === 0) return 'วันนี้!'; return `เหลือ ${diffDays} วัน`; };
+
+            // --- LOGIN SCREEN LOGIC ---
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (inputPin === STORE_PIN) {
+                    setIsAuthenticated(true);
+                } else {
+                    alert("รหัสผิดจ้า! ❌ ลองใหม่นะ");
+                }
+            };
+
+            const searchFilter = (item) => {
+                const searchLower = searchTerm.toLowerCase();
+                if (item.status === 'sold') return false;
+                if (!searchTerm) return true;
+
+                const matchesName = item.name?.toLowerCase().includes(searchLower);
+                const matchesSource = item.source?.toLowerCase().includes(searchLower);
+                const matchesDetails = item.details?.toLowerCase().includes(searchLower);
+
+                return matchesName || matchesSource || matchesDetails;
+            };
+
+            if (!isAuthenticated) {
+                return (
+                    <div className="min-h-screen bg-pink-50 flex items-center justify-center font-sans relative overflow-hidden">
+                        <CuteBackground />
+                        <div className="bg-white p-8 rounded-[2.5rem] shadow-xl w-full max-w-sm border-4 border-pink-100 relative z-10 mx-4 fade-in">
+                            <div className="text-center mb-8">
+                                <div className="bg-pink-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-pink-500 shadow-sm animate-bounce">
+                                    <Lock size={36} strokeWidth={2.5}/>
+                                </div>
+                                <h1 className="text-3xl font-black text-pink-500 mb-1">PLUEMSHOP</h1>
+                                <p className="text-gray-400 text-sm">กรุณาใส่รหัสเพื่อเข้าจัดการร้าน</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input 
+                                    type="password" 
+                                    inputMode="numeric" 
+                                    pattern="[0-9]*" 
+                                    maxLength="6"
+                                    placeholder="รหัสผ่าน" 
+                                    className="w-full p-4 bg-gray-50 border-2 border-pink-100 rounded-2xl text-center text-2xl font-black text-gray-700 tracking-[0.5em] focus:border-pink-400 focus:outline-none transition-all placeholder:text-sm placeholder:tracking-normal placeholder:font-normal"
+                                    value={inputPin}
+                                    onChange={(e) => setInputPin(e.target.value)}
+                                    autoFocus
+                                />
+                                <button type="submit" className="w-full bg-pink-500 hover:bg-pink-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-pink-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                                    <LogIn size={20} /> เข้าสู่ระบบ
+                                </button>
+                            </form>
+                            <p className="text-center text-[10px] text-gray-300 mt-6">ระบบจัดการร้าน By AI Gemini</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (loading) return <div className="min-h-screen bg-pink-50 flex items-center justify-center"><div className="animate-spin text-5xl">👻</div></div>;
+
+            return (
+                <div className="min-h-screen bg-pink-50 font-sans pb-24 md:pb-0 md:pl-72 selection:bg-pink-200 relative">
+                    <CuteBackground />
+
+                    {errorMsg && (
+                        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white p-3 z-50 text-center font-bold shadow-lg flex items-center justify-center gap-3">
+                            <AlertTriangle size={20} className="animate-pulse" />
+                            <span className="text-sm md:text-base">
+                                {errorMsg}
+                            </span>
+                            <a href="https://console.firebase.google.com/project/free-92b03/firestore/rules" target="_blank" className="bg-white text-red-600 px-3 py-1 rounded-full text-xs font-black ml-4 hover:bg-red-100 transition-colors">
+                                แก้ไข RULES
+                            </a>
+                        </div>
+                    )}
+
+                    <aside className="hidden md:flex flex-col w-72 bg-white/90 backdrop-blur border-r-2 border-pink-100 fixed inset-y-0 left-0 z-20">
+                        <div className="p-8 pb-4">
+                            <h1 className="text-3xl font-black flex items-center gap-2 text-pink-500 tracking-tight transform -rotate-2">PLUEMSHOP<span className="text-2xl animate-bounce">💖</span></h1>
+                            <div className="mt-4 bg-pink-100/50 p-3 rounded-2xl border border-pink-200"><p className="text-xs text-pink-500 font-bold text-center">✨ ยินดีต้อนรับคุณปลื้ม ✨</p></div>
+                        </div>
+                        <nav className="flex-1 p-6 space-y-3">
+                            {[{ id: 'dashboard', icon: Heart, label: 'ภาพรวม' }, { id: 'stock', icon: Package, label: 'คลังสินค้า' }, { id: 'customers', icon: Users, label: 'ลูกค้า' }].map(tab => (
+                                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-300 font-bold border-2 ${activeTab === tab.id ? 'bg-pink-400 border-pink-400 text-white shadow-lg shadow-pink-200 scale-105' : 'bg-white border-transparent text-gray-400 hover:border-pink-200 hover:bg-pink-50'}`}>
+                                    <tab.icon size={22} fill={activeTab === tab.id ? "currentColor" : "none"} /> {tab.label}
+                                </button>
+                            ))}
+                        </nav>
+                    </aside>
+                    <nav className="md:hidden fixed bottom-4 inset-x-4 bg-white/90 backdrop-blur-md border-2 border-pink-100 rounded-[2rem] z-40 flex justify-between p-2 shadow-2xl shadow-pink-200/50">
+                        {[{ id: 'dashboard', icon: Heart }, { id: 'stock', icon: Package }, { id: 'customers', icon: Users }].map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 flex flex-col items-center py-3 rounded-2xl transition-all ${activeTab === tab.id ? 'bg-pink-400 text-white shadow-lg shadow-pink-200' : 'text-gray-300'}`}>
+                                <tab.icon size={24} fill={activeTab === tab.id ? "currentColor" : "none"}/>
+                            </button>
+                        ))}
+                    </nav>
+
+                    <main className="p-6 md:p-10 max-w-7xl mx-auto relative z-10">
+                        <div className="md:hidden mb-6 flex items-center justify-between"><h1 className="text-2xl font-black text-pink-500 flex items-center gap-2">PLUEMSHOP <Heart fill="currentColor" size={24}/></h1></div>
+
+                        {/* DASHBOARD */}
+                        {activeTab === 'dashboard' && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                                <h2 className="text-3xl font-black text-gray-700 mb-2 flex items-center gap-2">ภาพรวมร้าน <Cat className="text-orange-300"/></h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    <StatCard title="กำไรสุทธิ" value={formatTHB(stats.totalProfit)} colorClass="bg-green-400" icon={DollarSign} subValue={`ขาย+ยึด: ${formatTHB(stats.totalRevenue)}`} />
+                                    <StatCard title="ขายแล้ว" value={`${stats.soldCount} รายการ`} colorClass="bg-blue-400" icon={ShoppingCart} />
+                                    <StatCard title="สต็อก" value={formatTHB(stats.stockValue)} colorClass="bg-pink-400" icon={Package} subValue={`${stats.stockCount} รายการ`} />
+                                    <StatCard title="ของที่ยึดมา" value={`${stats.seizedCount} รายการ`} colorClass="bg-red-400" icon={Gavel} />
+                                </div>
+                                <div className="bg-white/90 backdrop-blur rounded-[2rem] shadow-sm border-2 border-pink-100 overflow-hidden">
+                                    <div className="p-6 border-b border-pink-100 flex items-center gap-3 bg-pink-50/30">
+                                        <Calendar className="text-pink-500" size={24}/>
+                                        <h3 className="font-bold text-xl text-gray-700">รายรับรายเดือน</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-pink-100/50 text-pink-500 font-bold uppercase">
+                                                <tr><th className="p-5 pl-8 rounded-tl-xl">เดือน/ปี</th><th className="p-5 text-right">จำนวน</th><th className="p-5 text-right">ยอดขาย</th><th className="p-5 pr-8 text-right text-green-600 rounded-tr-xl">กำไร</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-pink-50">
+                                                {Object.entries(stats.monthlyData).map(([month, data]) => (
+                                                    <tr key={month} className="hover:bg-pink-50/50 transition-colors">
+                                                        <td className="p-5 pl-8 font-bold text-gray-700">{month}</td>
+                                                        <td className="p-5 text-right font-medium text-gray-500">{data.count}</td>
+                                                        <td className="p-5 text-right font-bold text-gray-700">{formatTHB(data.revenue)}</td>
+                                                        <td className="p-5 pr-8 text-right text-green-500 font-black">+{formatTHB(data.profit)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* STOCK */}
+                        {activeTab === 'stock' && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                                <div className="flex flex-col sm:flex-row justify-between gap-4 items-end sm:items-center">
+                                    <div><h2 className="text-3xl font-black text-gray-700 flex items-center gap-2">คลังสินค้า <Package className="text-blue-300"/></h2><p className="text-gray-400 font-medium ml-1">ค้นหาและจัดการสินค้าของคุณ</p></div>
+                                    <button onClick={() => setIsAddModalOpen(true)} className="bg-pink-400 hover:bg-pink-500 text-white px-6 py-3 rounded-2xl flex items-center gap-2 shadow-[0_4px_0_rgb(219,39,119)] hover:shadow-[0_2px_0_rgb(219,39,119)] hover:translate-y-[2px] transition-all w-full sm:w-auto justify-center font-bold">
+                                        <Plus size={24} strokeWidth={3} /> เพิ่มสินค้า
+                                    </button>
+                                </div>
+                                
+                                {/* Search Bar */}
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="ค้นหาสินค้าด้วย ID, ชื่อ, หรือแหล่งที่มา..."
+                                        className="w-full p-3 pl-10 border-2 border-pink-200 rounded-2xl focus:border-pink-500 focus:ring-0 outline-none transition-all bg-white"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                    <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                </div>
+
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {items.filter(searchFilter).map(item => {
+                                        const isOverdue = item.status === 'installment' && checkOverdue(item.installmentDueDate);
+                                        const isSeized = item.status === 'seized';
+                                        return (
+                                            <div key={item.id} className={`bg-white rounded-[2rem] border-2 ${isSeized ? 'border-gray-300 bg-gray-50 grayscale' : isOverdue ? 'border-red-300 ring-2 ring-red-100' : item.status === 'installment' ? 'border-amber-300 ring-2 ring-amber-100' : 'border-pink-100'} shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col relative overflow-hidden group`}>
+                                                {item.imageUrl ? (
+                                                    <div className="w-full h-48 bg-gray-100 relative overflow-hidden group-hover:h-52 transition-all duration-300">
+                                                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                    </div>
+                                                ) : (
+                                                    <div className={`absolute top-0 w-full h-2 bg-gradient-to-r ${isSeized ? 'from-gray-300 to-gray-400' : item.status === 'installment' ? 'from-amber-400 to-orange-400' : 'from-pink-300 to-blue-300'}`}></div>
+                                                )}
+
+                                                <div className="p-6 flex-1">
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        {isSeized ? (
+                                                            <span className="bg-gray-200 text-gray-600 px-3 py-1 rounded-full font-black text-xs uppercase shadow-sm flex items-center gap-1"><Gavel size={12}/> ยึดแล้ว ⛔</span>
+                                                        ) : item.status === 'installment' ? (
+                                                            <span className={`px-3 py-1 rounded-full font-black text-xs uppercase shadow-sm flex items-center gap-1 ${isOverdue ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-amber-100 text-amber-600'}`}>
+                                                                {isOverdue ? <AlertTriangle size={12}/> : <Clock size={12}/>} {isOverdue ? 'เลยกำหนด!' : 'กำลังผ่อน'}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full font-black text-xs uppercase shadow-sm">พร้อมขาย</span>
+                                                        )}
+                                                        
+                                                        <div className="flex gap-2 relative z-10">
+                                                            {/* FIX: Seize Button with stopPropagation */}
+                                                            {item.status === 'installment' && (
+                                                                <button onClick={(e) => { e.stopPropagation(); openSeizeConfirm(item); }} className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm hover:scale-110" title="ยึดคืนทันที"><Gavel size={18} strokeWidth={2.5} /></button>
+                                                            )}
+                                                            <button onClick={(e) => { e.stopPropagation(); setSelectedItem(item); setEditItemData({...item, ...item}); setIsEditModalOpen(true); }} className="p-2 bg-blue-50 text-blue-400 hover:bg-blue-100 rounded-xl transition-all border border-blue-100 shadow-sm"><Edit2 size={18} strokeWidth={2.5}/></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); setItemToDelete(item); setIsDeleteModalOpen(true); }} className="p-2 bg-red-50 text-red-400 hover:bg-red-100 rounded-xl transition-all border border-red-100 shadow-sm"><Trash2 size={18} strokeWidth={2.5}/></button>
+                                                        </div>
+                                                    </div>
+                                                    <h3 className="font-black text-xl text-gray-800 mb-1">{item.name}</h3>
+                                                    <div className="flex items-center gap-1 text-xs text-gray-400 font-bold mb-3 pl-1"><MapPin size={12} className="text-pink-400" /> รับจาก: <span className="text-gray-600">{item.source || '-'}</span></div>
+                                                    
+                                                    {item.status === 'installment' && (
+                                                        <div className={`mb-4 p-4 rounded-2xl border ${isOverdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-100'}`}>
+                                                            <div className="flex justify-between text-xs font-bold text-amber-700 mb-1"><span>จ่ายแล้ว: {formatTHB(item.totalPaid)}</span><span>ราคาเต็ม: {formatTHB(item.price)}</span></div>
+                                                            <div className="w-full bg-white rounded-full h-2.5 mb-2 overflow-hidden border border-amber-200">
+                                                                <div className={`h-2.5 rounded-full ${isOverdue ? 'bg-red-500' : 'bg-amber-500'}`} style={{ width: `${Math.min((item.totalPaid / item.price) * 100, 100)}%` }}></div>
+                                                            </div>
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="text-xs font-bold text-amber-500">เหลือ {formatTHB(Math.max(item.price - item.totalPaid, 0))}</div>
+                                                                {item.installmentDueDate && (<div className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 ${isOverdue ? 'bg-red-200 text-red-700' : 'bg-amber-200 text-amber-700'}`}><Timer size={10}/> {getDaysRemaining(item.installmentDueDate)}</div>)}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <p className="text-gray-500 text-sm mb-6 bg-gray-50 p-4 rounded-2xl border border-gray-100">{item.details}</p>
+                                                    
+                                                    <div className="bg-pink-50 rounded-2xl border border-pink-100 overflow-hidden mb-6">
+                                                        <div onClick={() => { const newSecrets = {...showSecrets}; newSecrets[item.id] = !newSecrets[item.id]; setShowSecrets(newSecrets); }} className="p-4 flex justify-between items-center cursor-pointer hover:bg-pink-100 transition-colors select-none">
+                                                            <div className="flex items-center gap-2 text-sm font-bold text-pink-500"><Lock size={16}/> ข้อมูลลับ</div>
+                                                            {showSecrets[item.id] ? <EyeOff size={16} className="text-pink-400"/> : <Eye size={16} className="text-pink-400"/>}
+                                                        </div>
+                                                        {showSecrets[item.id] && (
+                                                            <div className="p-4 border-t border-pink-100 bg-white space-y-4">
+                                                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 space-y-2">
+                                                                    <div className="text-xs font-black text-blue-500 flex items-center gap-1"><Shield size={12}/> GAME ID</div>
+                                                                    <div className="grid grid-cols-1 gap-1"><div className="text-xs text-blue-800 break-all"><span className="opacity-50 font-bold mr-1">ID:</span>{item.gameEmail || '-'}</div><div className="text-xs text-blue-800 break-all"><span className="opacity-50 font-bold mr-1">PW:</span>{item.gameEmailPass || '-'}</div></div>
+                                                                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-blue-100/50"><div className="bg-white p-1.5 rounded text-[10px] text-center border border-blue-100"><div className="text-blue-300 font-bold mb-0.5">PIN</div><div className="font-mono text-blue-600 font-bold">{item.gamePin || '-'}</div></div><div className="bg-white p-1.5 rounded text-[10px] text-center border border-blue-100"><div className="text-blue-300 font-bold mb-0.5">8-DIGIT</div><div className="font-mono text-blue-600 font-bold break-all">{item.gameBackupCodes || '-'}</div></div></div>
+                                                                </div>
+                                                                <div className="bg-purple-50 p-3 rounded-xl border border-purple-100 space-y-2">
+                                                                    <div className="text-xs font-black text-purple-500 flex items-center gap-1"><Mail size={12}/> RECOVERY ID</div>
+                                                                    <div className="grid grid-cols-1 gap-1"><div className="text-xs text-purple-800 break-all"><span className="opacity-50 font-bold mr-1">ID:</span>{item.recoveryEmail || '-'}</div><div className="text-xs text-purple-800 break-all"><span className="opacity-50 font-bold mr-1">PW:</span>{item.recoveryEmailPass || '-'}</div></div>
+                                                                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-purple-100/50"><div className="bg-white p-1.5 rounded text-[10px] text-center border border-purple-100"><div className="text-purple-300 font-bold mb-0.5">PIN</div><div className="font-mono text-purple-600 font-bold">{item.recoveryPin || '-'}</div></div><div className="bg-white p-1.5 rounded text-[10px] text-center border border-purple-100"><div className="text-purple-300 font-bold mb-0.5">8-DIGIT</div><div className="font-mono text-purple-600 font-bold break-all">{item.recoveryBackupCodes || '-'}</div></div></div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex justify-between items-end">
+                                                        <div><p className="text-xs text-gray-400 font-bold">ราคาขาย</p><p className="text-2xl font-black text-pink-500">{formatTHB(item.price)}</p></div>
+                                                        <div className="text-right"><p className="text-xs text-gray-400 font-bold">กำไร</p><p className="text-sm font-bold text-green-500">+{formatTHB(item.price - item.cost)}</p></div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex border-t border-gray-100">
+                                                    {isSeized ? (
+                                                        <button onClick={(e) => { e.stopPropagation(); handleRestockItem(item); }} className="flex-1 bg-gray-100 hover:bg-green-100 text-gray-500 hover:text-green-600 font-bold p-4 transition-colors flex items-center justify-center gap-2 text-sm w-full"><RefreshCcw size={18}/> นำกลับมาขายใหม่ (Restock)</button>
+                                                    ) : (
+                                                        <>
+                                                            <button onClick={(e) => { e.stopPropagation(); openInstallmentModal(item); }} className={`flex-1 font-bold p-4 transition-colors flex items-center justify-center gap-2 border-r border-gray-100 text-sm ${isOverdue ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-amber-50 text-amber-600 hover:bg-amber-100'}`}><Clock size={18} /> {item.status === 'installment' ? 'ผ่อนต่อ/ดูยอด' : 'ผ่อนชำระ'}</button>
+                                                            <button onClick={(e) => { e.stopPropagation(); setSelectedItem(item); setCustomerInfo({ name: '', contact: '', note: '' }); setSaleDate(getTodayDate()); setIsSellModalOpen(true); }} className="flex-1 bg-gray-50 hover:bg-pink-400 hover:text-white text-gray-500 font-bold p-4 transition-colors flex items-center justify-center gap-2 text-sm"><ShoppingCart size={18} /> {item.status === 'installment' ? 'ปิดยอด' : 'แจ้งขาย'}</button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* CUSTOMERS */}
+                        {activeTab === 'customers' && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                                <h2 className="text-3xl font-black text-gray-700">ประวัติการขาย 📜</h2>
+                                <div className="bg-white/90 backdrop-blur rounded-[2rem] shadow-sm border-2 border-pink-100 overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-pink-100/50 text-pink-500 font-bold uppercase">
+                                                <tr><th className="p-5 pl-8">วันที่</th><th className="p-5">สินค้า</th><th className="p-5">ลูกค้า</th><th className="p-5 text-right">ราคาขาย</th><th className="p-5 text-right">กำไร</th><th className="p-5 pr-8 text-center">จัดการ</th></tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-pink-50">
+                                                {items.filter(i => i.status === 'sold').map(item => (
+                                                    <tr key={item.id} className="hover:bg-pink-50/50 transition-colors">
+                                                        <td className="p-5 pl-8 text-gray-500 font-bold whitespace-nowrap">{item.soldDate ? item.soldDate.toLocaleDateString('th-TH') : '-'}</td>
+                                                        <td className="p-5 font-bold text-gray-700">
+                                                            <div className="flex items-center gap-2">
+                                                                {item.imageUrl && <img src={item.imageUrl} className="w-8 h-8 rounded-md object-cover border border-pink-100" alt="" />}
+                                                                <div><div>{item.name}</div><div className="text-xs text-gray-400 font-normal mt-0.5">จาก: {item.source || '-'}</div></div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-5"><div className="font-bold text-gray-700">{item.customerName}</div><div className="text-xs text-gray-400">{item.customerContact}</div></td>
+                                                        <td className="p-5 text-right font-bold text-pink-500">{formatTHB(item.finalPrice || item.price)}</td>
+                                                        <td className="p-5 text-right text-green-500 font-black">+{formatTHB((item.finalPrice || item.price) - item.cost)}</td>
+                                                        <td className="p-5 pr-8 text-center"><button onClick={() => { setItemToDelete(item); setIsDeleteModalOpen(true); }} className="p-2 bg-red-50 text-red-400 hover:bg-red-100 rounded-xl transition-all"><Trash2 size={18} /></button></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* MODALS */}
+                    <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="เพิ่มสินค้าใหม่">
+                        <form onSubmit={handleAddItem} className="space-y-4">
+                            <input type="text" required placeholder="ชื่อสินค้า / ID" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none transition-all font-bold text-gray-700" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} />
+                            <input type="text" placeholder="รับจาก..." className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none font-bold text-gray-600" value={newItem.source} onChange={(e) => setNewItem({...newItem, source: e.target.value})} />
+                            <div className="flex gap-2 items-center text-xs font-bold text-gray-400 mb-1 ml-1"><CalendarDays size={14}/> วันที่รับของ</div>
+                            <input type="date" required className="w-full p-3 bg-white border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none font-bold text-gray-600" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+                            <div className="bg-pink-50 p-3 rounded-xl border-2 border-dashed border-pink-200 text-center relative group">
+                                {newItem.imageUrl ? (<div className="relative"><img src={newItem.imageUrl} className="w-full h-40 object-cover rounded-lg" alt="Preview" /><button type="button" onClick={() => removeImage(false)} className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"><X size={16}/></button></div>) : (<><input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, false)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" /><div className="flex flex-col items-center justify-center py-4 text-pink-400"><ImageIcon size={32} className="mb-2" /><span className="text-sm font-bold">คลิกเพื่อเพิ่มรูปภาพ</span></div></>)}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4"><input type="number" placeholder="ทุน" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none font-bold" value={newItem.cost} onChange={(e) => setNewItem({...newItem, cost: e.target.value})} /><input type="number" placeholder="ราคาขาย" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none font-bold text-pink-500" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} /></div>
+                            <div className="space-y-3"><div className="text-xs font-bold text-pink-500 flex items-center gap-1"><Lock size={12}/> ข้อมูลลับ (เจ้าของเห็นเท่านั้น)</div><SecretInputGroup title="Game" color="blue" prefix="game" data={newItem} setData={setNewItem} /><SecretInputGroup title="Recovery" color="purple" prefix="recovery" data={newItem} setData={setNewItem} /></div>
+                            <textarea rows="2" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none" placeholder="รายละเอียดอื่นๆ..." value={newItem.details} onChange={(e) => setNewItem({...newItem, details: e.target.value})}></textarea>
+                            <button type="submit" className="w-full bg-pink-400 hover:bg-pink-500 text-white py-3 rounded-xl font-bold shadow-[0_4px_0_rgb(219,39,119)] hover:shadow-[0_2px_0_rgb(219,39,119)] hover:translate-y-[2px] transition-all">บันทึก ✨</button>
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="แก้ไขข้อมูล">
+                        <form onSubmit={handleUpdateItem} className="space-y-4">
+                            <input type="text" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold" value={editItemData.name} onChange={(e) => setEditItemData({...editItemData, name: e.target.value})} />
+                            <input type="text" placeholder="รับจาก..." className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold text-gray-600" value={editItemData.source} onChange={(e) => setEditItemData({...editItemData, source: e.target.value})} />
+                            <div className="bg-pink-50 p-3 rounded-xl border-2 border-dashed border-pink-200 text-center relative">{editItemData.imageUrl ? (<div className="relative"><img src={editItemData.imageUrl} className="w-full h-40 object-cover rounded-lg" alt="Preview" /><button type="button" onClick={() => removeImage(true)} className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 shadow-md hover:bg-red-600"><X size={16}/></button></div>) : (<><input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, true)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" /><div className="flex flex-col items-center justify-center py-4 text-pink-400"><ImageIcon size={32} className="mb-2" /><span className="text-sm font-bold">เปลี่ยนรูปภาพ</span></div></>)}</div>
+                            <div className="grid grid-cols-2 gap-4"><input type="number" className="p-3 bg-gray-50 rounded-xl" value={editItemData.cost} onChange={(e) => setEditItemData({...editItemData, cost: e.target.value})} /><input type="number" className="p-3 bg-white border-2 border-pink-300 rounded-xl text-pink-500 font-bold" value={editItemData.price} onChange={(e) => setEditItemData({...editItemData, price: e.target.value})} /></div>
+                            <div className="space-y-3"><SecretInputGroup title="Game" color="blue" prefix="game" data={editItemData} setData={setEditItemData} /><SecretInputGroup title="Recovery" color="purple" prefix="recovery" data={editItemData} setData={setEditItemData} /></div>
+                            <textarea rows="2" placeholder="รายละเอียดอื่นๆ (หมายเหตุ)" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-pink-300 outline-none" value={editItemData.details} onChange={(e) => setEditItemData({...editItemData, details: e.target.value})}></textarea>
+                            {selectedItem?.status === 'installment' && (<button type="button" onClick={() => openSeizeConfirm(selectedItem)} className="w-full bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 py-3 rounded-xl font-bold mt-2 flex items-center justify-center gap-2"><Gavel size={18}/> ยึดคืนสินค้านี้ (Backup)</button>)}
+                            <button type="submit" className="w-full bg-blue-400 hover:bg-blue-500 text-white py-3 rounded-xl font-bold shadow-[0_4px_0_rgb(59,130,246)] hover:shadow-[0_2px_0_rgb(59,130,246)] hover:translate-y-[2px] transition-all">อัปเดต ✅</button>
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={isSellModalOpen} onClose={() => setIsSellModalOpen(false)} title="ยืนยันการขาย">
+                        <form onSubmit={handleSellItem} className="space-y-4">
+                            <div className="bg-pink-100 p-4 rounded-2xl text-center border-2 border-pink-200 border-dashed">
+                                {selectedItem?.imageUrl && (<img src={selectedItem.imageUrl} className="w-24 h-24 object-cover rounded-lg mx-auto mb-3 shadow-sm" alt="Product" />)}
+                                <div className="text-gray-600 font-bold">{selectedItem?.name}</div>
+                                <div className="text-3xl font-black text-pink-500 mt-1">{formatTHB(selectedItem?.price || 0)}</div>
+                            </div>
+                            <input type="text" required placeholder="ชื่อลูกค้า" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold" value={customerInfo.name} onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})} />
+                            <input type="text" placeholder="ช่องทางติดต่อ" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold" value={customerInfo.contact} onChange={(e) => setCustomerInfo({...customerInfo, contact: e.target.value})} />
+                            <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                                <div className="flex gap-2 items-center text-xs font-bold text-gray-400 mb-1"><CalendarDays size={14}/> วันที่ขาย (เลือกย้อนหลังได้)</div>
+                                <input type="date" required className="w-full p-2 bg-white border border-gray-200 rounded-lg font-bold text-gray-600" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
+                            </div>
+                            <button type="submit" className="w-full bg-green-400 hover:bg-green-500 text-white py-3 rounded-xl font-bold shadow-[0_4px_0_rgb(34,197,94)] hover:shadow-[0_2px_0_rgb(34,197,94)] hover:translate-y-[2px] transition-all">ขายเลย 💰</button>
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={isInstallmentModalOpen} onClose={() => setIsInstallmentModalOpen(false)} title={selectedItem?.status === 'available' ? 'เริ่มผ่อนชำระ' : 'จัดการผ่อน'}>
+                        <form onSubmit={handleInstallmentSubmit} className="space-y-4">
+                            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-center relative">
+                                <div className="text-amber-800 font-bold text-sm">ยอดรวมทั้งหมด</div>
+                                <div className="text-3xl font-black text-amber-500">{formatTHB(selectedItem?.price || 0)}</div>
+                                {selectedItem?.status === 'installment' && (<div className="text-xs text-amber-600 mt-1 font-bold">คงเหลือ: {formatTHB((selectedItem?.price || 0) - (selectedItem?.totalPaid || 0))}</div>)}
+                            </div>
+
+                            {selectedItem?.status === 'available' && (
+                                <>
+                                    <div className="text-xs font-bold text-gray-400 uppercase">ข้อมูลลูกค้า</div>
+                                    <input type="text" required placeholder="ชื่อลูกค้า" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold" value={customerInfo.name} onChange={(e) => setCustomerInfo({...customerInfo, name: e.target.value})} />
+                                    <input type="text" placeholder="ช่องทางติดต่อ" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl font-bold" value={customerInfo.contact} onChange={(e) => setCustomerInfo({...customerInfo, contact: e.target.value})} />
+                                    <div className="bg-red-50 p-3 rounded-xl border border-red-100">
+                                        <div className="flex gap-2 items-center text-xs font-bold text-red-500 mb-1"><AlertTriangle size={14}/> ต้องผ่อนให้จบภายใน (Dead Line)</div>
+                                        <input type="date" required className="w-full p-2 bg-white border border-red-200 rounded-lg font-bold text-red-600" value={installmentDueDate} onChange={(e) => setInstallmentDueDate(e.target.value)} />
+                                    </div>
+                                </>
+                            )}
+
+                            {selectedItem?.status === 'installment' && (
+                                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex justify-between items-center">
+                                    <div className="text-xs text-gray-500 font-bold">วันครบกำหนดเดิม:</div>
+                                    <div className="text-sm font-black text-red-500">{selectedItem?.installmentDueDate ? selectedItem.installmentDueDate.toLocaleDateString('th-TH') : 'ไม่ระบุ'}</div>
+                                </div>
+                            )}
+
+                            <div className="text-xs font-bold text-gray-400 uppercase">รายละเอียดการจ่าย</div>
+                            <div className="flex gap-2">
+                                <input type="date" required className="w-2/5 p-3 bg-white border-2 border-gray-100 rounded-xl font-bold text-gray-600" value={installmentDate} onChange={(e) => setInstallmentDate(e.target.value)} />
+                                <input type="number" placeholder="จำนวนเงิน" className="w-3/5 p-3 bg-white border-2 border-amber-300 rounded-xl font-bold text-amber-600 text-lg" value={installmentAmount} onChange={(e) => setInstallmentAmount(e.target.value)} />
+                            </div>
+                            <textarea placeholder="หมายเหตุ (ถ้ามี)" className="w-full p-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm" rows="2" value={customerInfo.note} onChange={(e) => setCustomerInfo({...customerInfo, note: e.target.value})}></textarea>
+
+                            <button type="submit" className="w-full bg-amber-400 hover:bg-amber-500 text-white py-3 rounded-xl font-bold shadow-[0_4px_0_rgb(245,158,11)] hover:shadow-[0_2px_0_rgb(245,158,11)] hover:translate-y-[2px] transition-all">บันทึกยอด 📝</button>
+                            
+                            {selectedItem?.installmentLogs?.length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-gray-100">
+                                    <div className="text-xs font-bold text-gray-400 mb-2">ประวัติการจ่าย</div>
+                                    <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">
+                                        {selectedItem.installmentLogs.map((log, idx) => (
+                                            <div key={idx} className="flex justify-between text-xs bg-gray-50 p-2 rounded border border-gray-100">
+                                                <span className="text-gray-500">{new Date(log.date).toLocaleDateString('th-TH')}</span>
+                                                <span className="font-bold text-green-600">+{formatTHB(log.amount)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {selectedItem?.status === 'installment' && (
+                                <div className="pt-4 border-t border-dashed border-gray-300 space-y-3">
+                                    {/* Closing Button */}
+                                    {(selectedItem?.price - selectedItem?.totalPaid <= 0) && (
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex gap-2 items-center text-xs font-bold text-green-600"><CalendarDays size={14}/> วันที่ปิดยอด</div>
+                                            <div className="flex gap-2">
+                                                <input type="date" className="w-2/5 p-2 bg-green-50 border border-green-200 rounded-lg font-bold text-green-800 text-xs" value={closingDate} onChange={(e) => setClosingDate(e.target.value)} />
+                                                <button type="button" onClick={handleFinishInstallment} className="w-3/5 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg font-bold flex items-center justify-center gap-2 animate-pulse text-xs shadow-md"><CheckCircle2 size={16}/> ยืนยันปิดการขาย</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <button type="button" onClick={() => openSeizeConfirm(selectedItem)} className="w-full bg-red-100 hover:bg-red-200 text-red-600 border-2 border-red-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"><Gavel size={18}/> ❌ ลูกค้าเบี้ยว / ยึดคืนสินค้า</button>
+                                </div>
+                            )}
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={isSeizeConfirmOpen} onClose={() => setIsSeizeConfirmOpen(false)} title="ยืนยันการยึดคืน" isAlert>
+                        <div className="text-center space-y-4">
+                            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-500 animate-bounce"><Gavel size={40} /></div>
+                            <div>
+                                <p className="font-black text-gray-800 text-xl">ยึดคืนสินค้า?</p>
+                                <p className="text-sm text-gray-500 mt-2">สินค้า <span className="font-bold text-red-500">"{itemToSeize?.name}"</span> จะถูกยึด<br/>และเงิน <span className="font-bold text-green-500">+{formatTHB(itemToSeize?.totalPaid)}</span> จะเข้าเป็นกำไรทันที</p>
+                                <div className="bg-orange-50 border border-orange-100 p-2 rounded-lg mt-3 text-xs text-orange-600 font-bold">✨ ระบบจะสร้างสินค้าใหม่ให้ขายต่ออัตโนมัติ</div>
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <button onClick={() => setIsSeizeConfirmOpen(false)} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">ยกเลิก</button>
+                                <button onClick={confirmSeize} className="flex-1 py-3 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-200 hover:translate-y-[2px] transition-all">ยืนยันการยึด 🔨</button>
+                            </div>
+                        </div>
+                    </Modal>
+
+                    <Modal isOpen={isDeleteModalOpen} onClose={() => setIsDeleteModalOpen(false)} title="ลบสินค้า?" isAlert>
+                        <div className="text-center space-y-4">
+                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-400 animate-pulse"><Trash2 size={32} /></div>
+                            <div><p className="font-bold text-gray-700 text-lg">จะลบจริงๆ เหรอคะ?</p><p className="text-sm text-gray-400">"{itemToDelete?.name}" จะหายไปถาวรเลยนะ 🥺</p></div>
+                            <div className="flex gap-3 pt-2">
+                                <button onClick={() => setIsDeleteModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">เก็บไว้ก่อน</button>
+                                <button onClick={confirmDelete} className="flex-1 py-3 rounded-xl font-bold bg-red-400 text-white hover:bg-red-500 shadow-[0_4px_0_rgb(239,68,68)] hover:shadow-[0_2px_0_rgb(239,68,68)] hover:translate-y-[2px] transition-all">ลบเลย</button>
+                            </div>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
